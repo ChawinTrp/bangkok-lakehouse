@@ -15,3 +15,4 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+pythonpath = ["."]   # put repo root on sys.path so `include` imports under bare `pytest`
