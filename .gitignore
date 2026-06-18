@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Env / secrets — config stays out of git
+.env
+
+# The data lake — never commit data; it's reproducible from raw
+data/
+
+# Airflow local runtime
+logs/
+
+# OS cruft
+.DS_Store
+Thumbs.db
