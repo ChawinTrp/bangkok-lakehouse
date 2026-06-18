@@ -9,40 +9,34 @@ from __future__ import annotations
 import datetime as dt
 
 import pandas as pd
+import requests
 
 
-def filter_new_tickets(features, watermark):
-    """Keep only tickets new since the watermark; return the advanced watermark.
+def select_in_window(features, start, end):
+    """Keep features whose last_activity falls in the half-open window [start, end).
+
+    This is the idempotency fix: the cutoff is a pure ARGUMENT (fed from Airflow's
+    data_interval_start/end), not mutable global state. Re-running the same date
+    passes the same window -> identical output. The interval is half-open so two
+    adjacent days never both claim a ticket on the midnight boundary.
 
     Args:
-        features: list of Traffy GeoJSON features. Each one has
+        features: list of Traffy GeoJSON features. Each has
             feature["properties"]["last_activity"], a 'YYYY-MM-DD HH:MM:SS' string.
-        watermark: the highest last_activity we have already processed
-            (a 'YYYY-MM-DD HH:MM:SS' string), or None on the first ever run.
+        start: window start, inclusive ('YYYY-MM-DD HH:MM:SS' string).
+        end: window end, exclusive ('YYYY-MM-DD HH:MM:SS' string).
 
     Returns:
-        (new_features, new_watermark)
-        - new_features: features with last_activity >= watermark
-          (all of them if watermark is None).
-        - new_watermark: the new high-water mark. It must NEVER move backwards.
+        list of features with start <= last_activity < end.
     """
-    if not features:
-        return [], watermark
-
-    if watermark is None:
-        return features, max(feature["properties"]["last_activity"] for feature in features)
-
-    new_features = []
+    result = []
 
     for feature in features:
-        if feature["properties"]["last_activity"] >= watermark:
-            new_features.append(feature)
+        last_activity = feature["properties"]["last_activity"]
+        if start <= last_activity < end:
+            result.append(feature)
 
-    if not new_features:
-        return [], watermark
-    new_watermark = max(feature["properties"]["last_activity"] for feature in new_features)
-
-    return new_features, new_watermark
+    return result
 
 
 def flatten_traffy(features, run_id):
@@ -86,3 +80,18 @@ def flatten_traffy(features, run_id):
         )
 
     return pd.DataFrame(rows)
+
+def fetch_traffy_data(api_url, limit):
+    """Fetch Traffy Fondue data from the API.
+
+    Args:
+        api_url: the URL of the Traffy Fondue API endpoint.
+        limit: the maximum number of features to fetch.
+
+    Returns:
+        A list of Traffy GeoJSON features.
+    """
+    params = {"limit": limit}
+    response = requests.get(api_url, params=params, timeout=30)
+    response.raise_for_status()
+    return response.json()["features"]

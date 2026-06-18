@@ -1,13 +1,13 @@
 """Tests for include/traffy.py — the bronze ingestion logic.
 
-We test filter_new_tickets first (the watermark). It is a pure function:
-in = features + a watermark, out = the new features + the advanced watermark.
-No network, no files — so it runs in milliseconds and is easy to reason about.
+select_in_window is a pure function: in = features + a [start, end) window,
+out = the features inside that window. No network, no files, no hidden state —
+so re-running with the same inputs always gives the same output (idempotent).
 """
 
 import pandas as pd
 
-from include.traffy import filter_new_tickets, flatten_traffy
+from include.traffy import flatten_traffy, select_in_window
 
 
 def feat(ticket_id, last_activity):
@@ -15,47 +15,44 @@ def feat(ticket_id, last_activity):
     return {"properties": {"ticket_id": ticket_id, "last_activity": last_activity}}
 
 
-def test_first_run_no_watermark_keeps_everything():
-    # On the very first run there is no watermark yet -> take all features.
-    features = [feat("A", "2026-06-15 09:00:00"), feat("B", "2026-06-16 10:00:00")]
-    new, watermark = filter_new_tickets(features, None)
-    assert {f["properties"]["ticket_id"] for f in new} == {"A", "B"}
-    assert watermark == "2026-06-16 10:00:00"  # advanced to the newest seen
+def ids(features):
+    return [f["properties"]["ticket_id"] for f in features]
 
 
-def test_keeps_only_tickets_at_or_after_watermark():
+def test_window_keeps_only_tickets_inside():
     features = [
-        feat("OLD", "2026-06-15 08:00:00"),
-        feat("NEW", "2026-06-16 12:00:00"),
+        feat("BEFORE", "2026-06-16 23:59:59"),
+        feat("IN1", "2026-06-17 00:00:00"),
+        feat("IN2", "2026-06-17 12:30:00"),
+        feat("AFTER", "2026-06-18 00:00:00"),
     ]
-    new, watermark = filter_new_tickets(features, "2026-06-16 00:00:00")
-    assert [f["properties"]["ticket_id"] for f in new] == ["NEW"]
-    assert watermark == "2026-06-16 12:00:00"
+    out = select_in_window(features, "2026-06-17 00:00:00", "2026-06-18 00:00:00")
+    assert ids(out) == ["IN1", "IN2"]
 
 
-def test_boundary_ticket_is_kept():
-    # A ticket whose last_activity == watermark is KEPT (>=): reprocess, don't drop.
-    features = [feat("EDGE", "2026-06-16 00:00:00")]
-    new, _ = filter_new_tickets(features, "2026-06-16 00:00:00")
-    assert [f["properties"]["ticket_id"] for f in new] == ["EDGE"]
+def test_window_start_inclusive_end_exclusive():
+    # half-open [start, end): the start instant is in, the end instant is out
+    features = [feat("START", "2026-06-17 00:00:00"), feat("END", "2026-06-18 00:00:00")]
+    out = select_in_window(features, "2026-06-17 00:00:00", "2026-06-18 00:00:00")
+    assert ids(out) == ["START"]
 
 
-def test_all_old_returns_none_and_watermark_does_not_go_backward():
-    features = [feat("OLD", "2026-06-10 00:00:00")]
-    new, watermark = filter_new_tickets(features, "2026-06-16 00:00:00")
-    assert new == []
-    assert watermark == "2026-06-16 00:00:00"  # must NOT regress to the old ticket's date
+def test_window_no_matches():
+    features = [feat("OLD", "2026-06-01 00:00:00")]
+    out = select_in_window(features, "2026-06-17 00:00:00", "2026-06-18 00:00:00")
+    assert out == []
 
 
-def test_empty_features_keeps_watermark():
-    new, watermark = filter_new_tickets([], "2026-06-16 00:00:00")
-    assert new == []
-    assert watermark == "2026-06-16 00:00:00"
+def test_window_empty_features():
+    assert select_in_window([], "2026-06-17 00:00:00", "2026-06-18 00:00:00") == []
 
-def test_empty_features_and_no_watermark_returns_none():
-    new, watermark = filter_new_tickets([], None)
-    assert new == []
-    assert watermark is None
+
+def test_window_is_replayable():
+    # same inputs -> same output, every time (no global watermark state)
+    features = [feat("A", "2026-06-17 09:00:00"), feat("B", "2026-06-17 10:00:00")]
+    first = select_in_window(features, "2026-06-17 00:00:00", "2026-06-18 00:00:00")
+    second = select_in_window(features, "2026-06-17 00:00:00", "2026-06-18 00:00:00")
+    assert ids(first) == ids(second) == ["A", "B"]
 
 
 # --- flatten_traffy: nested GeoJSON feature -> flat DataFrame row ---
