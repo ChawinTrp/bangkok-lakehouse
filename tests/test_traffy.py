@@ -7,7 +7,7 @@ so re-running with the same inputs always gives the same output (idempotent).
 
 import pandas as pd
 
-from include.traffy import flatten_traffy, select_in_window
+from include.traffy import fetch_traffy_until, flatten_traffy, select_in_window
 
 
 def feat(ticket_id, last_activity):
@@ -17,6 +17,50 @@ def feat(ticket_id, last_activity):
 
 def ids(features):
     return [f["properties"]["ticket_id"] for f in features]
+
+
+def fake_feed(timestamps):
+    """A newest-first feed + a fetch_page(offset, limit) that paginates it."""
+    feats = [feat(f"T{i}", ts) for i, ts in enumerate(timestamps)]
+
+    def fetch_page(offset, limit):
+        return feats[offset : offset + limit]
+
+    return fetch_page
+
+
+def test_paginate_stops_once_a_page_dips_below_boundary():
+    # newest-first; boundary = start of 06-20. Page 2 reaches 06-19 -> stop there.
+    feed = fake_feed([
+        "2026-06-20 21:00:00",
+        "2026-06-20 12:00:00",
+        "2026-06-20 03:00:00",
+        "2026-06-19 22:00:00",  # below boundary -> page containing this stops the loop
+        "2026-06-19 10:00:00",  # never fetched
+    ])
+    out = fetch_traffy_until("url", boundary="2026-06-20 00:00:00", page_size=2, fetch_page=feed)
+    assert ids(out) == ["T0", "T1", "T2", "T3"]  # 2 pages, stopped before T4
+
+
+def test_paginate_stops_on_empty_page():
+    feed = fake_feed(["2026-06-20 21:00:00", "2026-06-20 12:00:00", "2026-06-20 03:00:00"])
+    # boundary older than everything -> never crosses; must stop when pages run out
+    out = fetch_traffy_until("url", boundary="2026-06-01 00:00:00", page_size=2, fetch_page=feed)
+    assert len(out) == 3
+
+
+def test_paginate_respects_max_records_safety_cap():
+    feed = fake_feed([f"2026-06-20 {h:02d}:00:00" for h in range(10)])  # all above boundary
+    out = fetch_traffy_until(
+        "url", boundary="2026-06-01 00:00:00", page_size=2, max_records=4, fetch_page=feed
+    )
+    assert len(out) == 4  # stopped at the cap, didn't run away
+
+
+def test_paginate_single_page_when_first_page_already_below_boundary():
+    feed = fake_feed(["2026-06-19 23:00:00", "2026-06-19 10:00:00"])
+    out = fetch_traffy_until("url", boundary="2026-06-20 00:00:00", page_size=5, fetch_page=feed)
+    assert ids(out) == ["T0", "T1"]  # one page, then stop
 
 
 def test_window_keeps_only_tickets_inside():

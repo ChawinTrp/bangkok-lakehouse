@@ -14,13 +14,13 @@ from airflow.decorators import dag, task
 
 # dags/ and include/ share the project root, which is on the path inside the Airflow image.
 from include.storage import write_bronze_parquet
-from include.traffy import fetch_traffy_data, flatten_traffy, select_in_window
+from include.traffy import fetch_traffy_until, flatten_traffy, select_in_window
 
 TRAFFY_URL = os.environ.get(
     "TRAFFY_API_URL",
     "https://publicapi.traffy.in.th/teamchadchart-stat-api/geojson/v1",
 )
-FETCH_LIMIT = 1000
+PAGE_SIZE = 500  # small pages: fast requests + cover the whole day by paginating
 
 
 @dag(
@@ -34,18 +34,22 @@ FETCH_LIMIT = 1000
 )
 def traffy_ingest():
     @task
-    def load_bronze(data_interval_start=None, data_interval_end=None):
-        # tz fix (2/2): interval is Bangkok-local (DAG tz) -> format to last_activity's shape
-        start = data_interval_start.strftime("%Y-%m-%d %H:%M:%S")
-        end = data_interval_end.strftime("%Y-%m-%d %H:%M:%S")
-        run_date = data_interval_start.strftime("%Y-%m-%d")
+    def load_bronze():
+        # The live endpoint is a newest-N SNAPSHOT, not date-addressable, so this job
+        # captures "today so far" in Bangkok time and overwrites today's partition.
+        # (Historical/backfill by logical_date is the monthly-archive DAG's job.)
+        now_bkk = pendulum.now("Asia/Bangkok")
+        run_date = now_bkk.strftime("%Y-%m-%d")
+        start = now_bkk.start_of("day").strftime("%Y-%m-%d %H:%M:%S")  # today 00:00 Bangkok
+        end = now_bkk.strftime("%Y-%m-%d %H:%M:%S")  # now
 
-        features = fetch_traffy_data(TRAFFY_URL, FETCH_LIMIT)
+        # paginate the newest-first feed until it dips below today's start, then window it
+        features = fetch_traffy_until(TRAFFY_URL, boundary=start, page_size=PAGE_SIZE)
         windowed = select_in_window(features, start, end)
         df = flatten_traffy(windowed, run_id=run_date)
         out = write_bronze_parquet(df, source="traffy", run_date=run_date)
 
-        print(f"landed {len(df)} rows -> {out}") 
+        print(f"landed {len(df)} rows -> {out}")
         return out
 
     load_bronze()

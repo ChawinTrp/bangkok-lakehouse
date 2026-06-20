@@ -81,17 +81,56 @@ def flatten_traffy(features, run_id):
 
     return pd.DataFrame(rows)
 
-def fetch_traffy_data(api_url, limit):
-    """Fetch Traffy Fondue data from the API.
+def fetch_traffy_data(api_url, limit, offset=0):
+    """Fetch one page of Traffy features (newest-first), starting at `offset`.
 
     Args:
-        api_url: the URL of the Traffy Fondue API endpoint.
-        limit: the maximum number of features to fetch.
+        api_url: the Traffy Fondue GeoJSON endpoint.
+        limit: page size — how many features to return.
+        offset: how many of the newest features to skip (for pagination).
 
     Returns:
         A list of Traffy GeoJSON features.
     """
-    params = {"limit": limit}
+    params = {"limit": limit, "offset": offset}
     response = requests.get(api_url, params=params, timeout=30)
     response.raise_for_status()
     return response.json()["features"]
+
+
+def fetch_traffy_until(api_url, boundary, page_size=500, max_records=5000, fetch_page=None):
+    """Page the newest-first feed until last_activity drops below `boundary`.
+
+    The live feed is ordered by last_activity DESC, so we walk pages from the
+    newest and stop once a page reaches tickets older than `boundary` (e.g. the
+    start of today) — that guarantees we covered the whole period regardless of
+    volume, while small pages keep each request fast (no giant-payload timeout).
+
+    `max_records` is a safety cap so a bug (or a boundary that never crosses)
+    can't loop forever. `fetch_page(offset, limit)` is injectable for testing;
+    by default it calls the live API.
+
+    Note: the feed mutates while we page (an updated ticket jumps to the front),
+    so pages can overlap or gap slightly. That's fine here — silver dedups on
+    ticket_id and the monthly archive is the authoritative backstop.
+
+    Returns:
+        list of features (may overshoot past `boundary`; caller windows it).
+    """
+    if fetch_page is None:
+        def fetch_page(offset, limit):
+            return fetch_traffy_data(api_url, limit, offset)
+
+    collected = []
+    offset = 0
+    while len(collected) < max_records:
+        page = fetch_page(offset, page_size)
+        if not page:
+            break  # ran out of data
+        collected.extend(page)
+        oldest = min(f["properties"]["last_activity"] for f in page)
+        if oldest < boundary:
+            break  # this page dipped below the boundary -> we have the whole period
+        offset += page_size
+
+    return collected
