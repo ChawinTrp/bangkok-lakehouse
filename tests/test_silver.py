@@ -4,7 +4,6 @@
 import pytest
 
 pyspark = pytest.importorskip("pyspark")
-from pyspark.sql import SparkSession  # noqa: E402
 from pyspark.sql.types import ArrayType, StringType, StructField, StructType  # noqa: E402
 
 from spark.transforms.silver_traffy import (  # noqa: E402
@@ -15,14 +14,6 @@ from spark.transforms.silver_traffy import (  # noqa: E402
 )
 
 pytestmark = pytest.mark.spark
-
-
-@pytest.fixture(scope="session")
-def spark():
-    s = SparkSession.builder.master("local[1]").appName("test").getOrCreate()
-    s.sparkContext.setLogLevel("ERROR")
-    yield s
-    s.stop()
 
 
 def test_dedup_keeps_latest_row_per_ticket(spark):

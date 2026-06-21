@@ -91,6 +91,13 @@ def main() -> None:
     bronze = spark.read.parquet(f"{LAKEHOUSE_ROOT}/bronze/traffy")
 
     tickets = build_silver_tickets(bronze)
+
+    # quality gate: validate BEFORE writing. If it raises, nothing is published and
+    # the existing silver is left untouched (failure blocks promotion).
+    from spark.quality.silver_checks import assert_quality
+
+    assert_quality(tickets)
+
     categories = explode_categories(tickets)
 
     # coalesce(1): the dedup shuffle leaves ~200 partitions; collapse to one file so
