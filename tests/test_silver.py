@@ -5,8 +5,14 @@ import pytest
 
 pyspark = pytest.importorskip("pyspark")
 from pyspark.sql import SparkSession  # noqa: E402
+from pyspark.sql.types import ArrayType, StringType, StructField, StructType  # noqa: E402
 
-from spark.transforms.silver_traffy import dedup_latest  # noqa: E402
+from spark.transforms.silver_traffy import (  # noqa: E402
+    dedup_latest,
+    explode_categories,
+    filter_bangkok_bbox,
+    parse_timestamps,
+)
 
 pytestmark = pytest.mark.spark
 
@@ -40,3 +46,37 @@ def test_dedup_is_idempotent(spark):
     twice = dedup_latest(once)
     assert once.count() == twice.count() == 2
     assert sorted(r["ticket_id"] for r in twice.collect()) == ["A", "B"]
+
+
+def test_parse_timestamps_converts_strings_and_keeps_nulls(spark):
+    from datetime import datetime
+
+    rows = [("A", "2026-06-20 12:00:00"), ("B", None)]
+    df = spark.createDataFrame(rows, ["ticket_id", "last_activity"])
+    parsed = parse_timestamps(df, cols=["last_activity"]).collect()
+    vals = {r["ticket_id"]: r["last_activity"] for r in parsed}
+    assert vals["A"] == datetime(2026, 6, 20, 12, 0, 0)  # now a real datetime, not a string
+    assert vals["B"] is None
+
+
+def test_filter_bangkok_bbox_keeps_only_inside(spark):
+    rows = [
+        ("IN", 100.5, 13.8),     # inside Bangkok
+        ("WEST", 99.0, 13.8),    # lon too far west
+        ("NORTH", 100.5, 15.0),  # lat too far north
+        ("NULL", None, None),    # missing coords
+    ]
+    df = spark.createDataFrame(rows, ["ticket_id", "lon", "lat"])
+    kept = [r["ticket_id"] for r in filter_bangkok_bbox(df).collect()]
+    assert kept == ["IN"]
+
+
+def test_explode_categories_one_row_per_pair(spark):
+    schema = StructType([
+        StructField("ticket_id", StringType()),
+        StructField("problem_type_fondue", ArrayType(StringType())),
+    ])
+    rows = [("A", ["tree", "road"]), ("B", ["flood"]), ("C", [])]
+    df = spark.createDataFrame(rows, schema)
+    out = sorted((r["ticket_id"], r["category"]) for r in explode_categories(df).collect())
+    assert out == [("A", "road"), ("A", "tree"), ("B", "flood")]  # C's empty array -> no rows
