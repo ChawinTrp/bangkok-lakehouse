@@ -14,5 +14,7 @@ select = ["E", "F", "I", "UP", "B"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# skip Spark tests by default (they need the Docker runtime); run them with: pytest -m spark
+addopts = "-q -m 'not spark'"
 pythonpath = ["."]   # put repo root on sys.path so `include` imports under bare `pytest`
+markers = ["spark: needs a Spark runtime — run inside the bangkok-spark Docker image"]

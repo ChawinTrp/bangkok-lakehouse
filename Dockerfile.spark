@@ -1,0 +1,14 @@
+# Spark runtime for the silver layer. Linux base, so no Windows winutils/NativeIO pain.
+# Build once:  docker build -t bangkok-spark -f Dockerfile.spark .
+# Test:        docker run --rm -v "${PWD}:/app" bangkok-spark pytest -m spark
+# Run a job:   docker run --rm -v "${PWD}:/app" bangkok-spark python -m spark.transforms.silver_traffy
+FROM python:3.11-slim
+
+# default-jre = Java 17 (PySpark 3.5 supports it); procps gives `ps`, which Spark needs.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends default-jre-headless procps \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir "pyspark>=3.5,<4" pandas pyarrow pytest requests
+
+WORKDIR /app
