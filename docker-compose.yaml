@@ -9,17 +9,21 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
     # make the top-level `include` package importable from DAGs
     PYTHONPATH: /opt/airflow
-    # our pipeline's runtime deps, installed into the image on first boot (dev convenience)
-    _PIP_ADDITIONAL_REQUIREMENTS: pandas pyarrow requests
+    # our pipeline's runtime deps + the Docker provider (for DockerOperator), installed on first boot
+    _PIP_ADDITIONAL_REQUIREMENTS: pandas pyarrow requests apache-airflow-providers-docker
     # where the lakehouse lands inside the container
     LAKEHOUSE_ROOT: /opt/airflow/data
     STORAGE_BACKEND: local
     TRAFFY_API_URL: https://publicapi.traffy.in.th/teamchadchart-stat-api/geojson/v1
+    # host path of this repo — the silver DockerOperator binds it on the HOST daemon
+    HOST_PROJECT_PATH: ${HOST_PROJECT_PATH}
   volumes:
     - ./dags:/opt/airflow/dags
     - ./include:/opt/airflow/include
     - ./data:/opt/airflow/data
     - ./logs:/opt/airflow/logs
+    # Docker-out-of-Docker: let Airflow launch sibling containers (the spark job)
+    - /var/run/docker.sock:/var/run/docker.sock
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
     postgres:

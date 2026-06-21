@@ -11,10 +11,15 @@ import os
 
 import pendulum
 from airflow.decorators import dag, task
+from airflow.providers.docker.operators.docker import DockerOperator
+from docker.types import Mount
 
 # dags/ and include/ share the project root, which is on the path inside the Airflow image.
 from include.storage import write_bronze_parquet
 from include.traffy import fetch_traffy_until, flatten_traffy, select_in_window
+
+# Host path of the repo — DockerOperator binds it on the HOST daemon (DooD), not in-container.
+HOST_PROJECT_PATH = os.environ["HOST_PROJECT_PATH"]
 
 TRAFFY_URL = os.environ.get(
     "TRAFFY_API_URL",
@@ -52,7 +57,22 @@ def traffy_ingest():
         print(f"landed {len(df)} rows -> {out}")
         return out
 
-    load_bronze()
+    # Silver runs as a SEPARATE container (the bangkok-spark image): Airflow triggers
+    # Spark, it doesn't run Spark in-process. DooD = the host daemon launches it.
+    silver = DockerOperator(
+        task_id="silver_transform",
+        image="bangkok-spark",
+        command="python -m spark.transforms.silver_traffy",
+        working_dir="/app",
+        mounts=[Mount(source=HOST_PROJECT_PATH, target="/app", type="bind")],
+        environment={"LAKEHOUSE_ROOT": "data"},
+        docker_url="unix://var/run/docker.sock",
+        network_mode="bridge",
+        auto_remove="success",
+        mount_tmp_dir=False,  # required under DooD: don't try to bind a worker tmp dir
+    )
+
+    load_bronze() >> silver
 
 
 traffy_ingest()
