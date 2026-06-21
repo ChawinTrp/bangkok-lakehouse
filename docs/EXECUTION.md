@@ -37,12 +37,12 @@
 
 ## Phase 2 — Silver with PySpark (weekend 2)
 
-- [ ] `spark/transforms/silver_traffy.py`: explicit schema; dedup on `ticket_id` (latest `last_activity` wins); **explode** `problem_type_fondue` array → one row per ticket-category; normalize Thai categories + `state_type_latest` via a reference map; parse timestamps; Bangkok bbox filter
-- [ ] Quality gate `spark/quality/silver_checks.py`: row-count delta vs bronze, null thresholds (geo + `ticket_id` mandatory), geo-bounds, **referential** (`district` ∈ `dim_district`) — **failure blocks promotion** (atomic write: temp dir + rename)
-- [ ] Wire into DAG: `bronze → quality_gate → silver`
-- [ ] Document the bronze→silver contract in `docs/contracts.md`
+- [x] `spark/transforms/silver_traffy.py`: dedup on `ticket_id` (latest `last_activity` wins); **explode** `problem_type_fondue` array → one row per ticket-category; normalize `state_type_latest` → canonical `status` via `STATE_MAP`; parse timestamps; Bangkok bbox filter. *(Schema-on-read, not an explicit StructType. Thai problem-category normalization deferred — the live category set is large/open; status was the high-value piece feeding the Phase 3 lifecycle fact.)*
+- [x] Quality gate `spark/quality/silver_checks.py`: `non_empty`, `not_null` (geo + `ticket_id`), `geo_bounds`, **`rowcount_delta`** (silver vs distinct bronze tickets) — **failure blocks promotion**. *(Write atomicity comes from Spark's `overwrite` mode, not a temp-dir+rename. **Referential** `district` ∈ `dim_district` deferred to Phase 3 — `dim_district` doesn't exist until then.)*
+- [x] Wire into DAG: `load_bronze >> silver_transform` (Spark via `DockerOperator`, Docker-out-of-Docker)
+- [x] Document the bronze→silver contract in `docs/contracts.md`
 
-**Proof:** a deliberately-poisoned bronze partition fails the gate and silver stays clean — record a 30-sec demo GIF for the README.
+**Proof:** a deliberately-poisoned bronze partition (null `ticket_id`) failed the gate → exit 1, nothing written, silver stayed at the clean row count. *(Verified live; 30-sec demo GIF for the README still TODO.)*
 
 ## Phase 3 — Gold + data model (weekend 3)
 

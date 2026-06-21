@@ -20,6 +20,16 @@ BKK_BBOX = (13.49, 100.32, 14.00, 100.94)
 # String columns that hold 'YYYY-MM-DD HH:MM:SS' timestamps in bronze.
 DEFAULT_TS_COLS = ("timestamp", "last_activity", "timestamp_inprogress", "timestamp_finished")
 
+# Traffy's raw lifecycle codes -> our canonical status vocabulary. Unmapped/new
+# codes resolve to null on purpose (drift is surfaced, never silently bucketed).
+STATE_MAP = {
+    "start": "reported",
+    "inprogress": "in_progress",
+    "finish": "resolved",
+    "forward": "forwarded",
+    "irrelevant": "rejected",
+}
+
 
 def dedup_latest(
     df: DataFrame, key: str = "ticket_id", order_col: str = "last_activity"
@@ -75,11 +85,25 @@ def explode_categories(
     return df.select(key, F.explode(F.col(col)).alias("category"))
 
 
+def normalize_state(
+    df: DataFrame, src: str = "state_type_latest", dst: str = "status"
+) -> DataFrame:
+    """Add a canonical `status` column derived from Traffy's raw lifecycle code.
+
+    The raw `src` column is preserved (the contract promises bronze columns survive).
+    Codes not in STATE_MAP — and nulls — map to null, so a newly-introduced Traffy
+    state shows up as a null status instead of being silently miscategorised.
+    """
+    mapping = F.create_map([F.lit(x) for kv in STATE_MAP.items() for x in kv])
+    return df.withColumn(dst, mapping[F.col(src)])
+
+
 def build_silver_tickets(df: DataFrame) -> DataFrame:
     """bronze -> one clean, typed, in-Bangkok row per ticket."""
     df = dedup_latest(df)
     df = parse_timestamps(df)
     df = filter_bangkok_bbox(df)
+    df = normalize_state(df)
     return df
 
 
@@ -89,14 +113,16 @@ def main() -> None:
     spark.sparkContext.setLogLevel("WARN")
 
     bronze = spark.read.parquet(f"{LAKEHOUSE_ROOT}/bronze/traffy")
+    bronze_distinct = bronze.select("ticket_id").distinct().count()
 
     tickets = build_silver_tickets(bronze)
 
     # quality gate: validate BEFORE writing. If it raises, nothing is published and
-    # the existing silver is left untouched (failure blocks promotion).
+    # the existing silver is left untouched (failure blocks promotion). Passing the
+    # distinct bronze ticket count enables the row-count-delta sanity check.
     from spark.quality.silver_checks import assert_quality
 
-    assert_quality(tickets)
+    assert_quality(tickets, bronze_count=bronze_distinct)
 
     categories = explode_categories(tickets)
 

@@ -10,6 +10,7 @@ from spark.transforms.silver_traffy import (  # noqa: E402
     dedup_latest,
     explode_categories,
     filter_bangkok_bbox,
+    normalize_state,
     parse_timestamps,
 )
 
@@ -60,6 +61,25 @@ def test_filter_bangkok_bbox_keeps_only_inside(spark):
     df = spark.createDataFrame(rows, ["ticket_id", "lon", "lat"])
     kept = [r["ticket_id"] for r in filter_bangkok_bbox(df).collect()]
     assert kept == ["IN"]
+
+
+def test_normalize_state_maps_known_and_nulls_unknown(spark):
+    rows = [
+        ("A", "finish"),       # -> resolved
+        ("B", "inprogress"),   # -> in_progress
+        ("C", "weird_state"),  # unknown -> null (surfaces drift, never silently bucketed)
+        ("D", None),           # null -> null
+    ]
+    df = spark.createDataFrame(rows, ["ticket_id", "state_type_latest"])
+    out = {r["ticket_id"]: r["status"] for r in normalize_state(df).collect()}
+    assert out == {"A": "resolved", "B": "in_progress", "C": None, "D": None}
+
+
+def test_normalize_state_preserves_original_column(spark):
+    df = spark.createDataFrame([("A", "start")], ["ticket_id", "state_type_latest"])
+    row = normalize_state(df).collect()[0]
+    assert row["state_type_latest"] == "start"  # raw value retained per the contract
+    assert row["status"] == "reported"
 
 
 def test_explode_categories_one_row_per_pair(spark):
