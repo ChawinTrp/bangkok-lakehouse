@@ -18,22 +18,22 @@
 
 ## Phase 0 — Today (~1 hr)
 
-- [ ] `git init` + first commit; create **public** GitHub repo `bangkok-location-lakehouse`, push
-- [ ] `cp .env.example .env`
-- [ ] `docker compose up airflow-init && docker compose up -d` — Airflow at http://localhost:8080 (`airflow`/`airflow`)
-- [ ] Confirm the `traffy_ingest` DAG appears with no import errors
-- [ ] `make test` passes locally (ruff + pytest + DAG integrity)
+- [ ] `git init` + first commit; create **public** GitHub repo, push — *local git done (7 commits); **not pushed yet — no GitHub remote configured***
+- [x] `cp .env.example .env`
+- [x] `docker compose up airflow-init && docker compose up -d` — Airflow at http://localhost:8080 (`airflow`/`airflow`)
+- [x] Confirm the `traffy_ingest` DAG appears with no import errors
+- [ ] `make test` passes locally — *no Makefile/CI yet; tests run via `pytest` (non-spark) + `pytest -m spark` in the `bangkok-spark` container + `ruff`. Makefile + CI workflow deferred to Phase 5.*
 
-**Proof:** Airflow UI screenshot with the DAG loaded, green CI badge on the repo.
+**Proof:** Airflow UI screenshot with the DAG loaded, green CI badge on the repo. *(DAG runs locally; GitHub repo + CI badge still pending.)*
 
 ## Phase 1 — Bronze: bulk seed + daily incremental (weekend 1)
 
-- [ ] **Seed task (once):** load the Kaggle 2022–2025 archive to `data/bronze/traffy/dt=<report_date>/` Parquet, partitioned by report date, untouched + load metadata (`_ingested_at`, `_source`, `_run_id`)
-- [ ] **Daily incremental DAG `traffy_ingest`:** poll the live GeoJSON endpoint → raw JSON → land to bronze with a **watermark** on `last_activity` (only tickets new/updated since the last run)
-- [ ] Idempotency: re-running a date overwrites that partition only (no dupes) — prove with two runs
-- [ ] Schedule `@daily`, `catchup=False`; README: bronze section of the architecture diagram + the "initial load + CDC" note
+- [ ] **Seed task (once):** load the historical archive to `data/bronze/traffy/dt=<report_date>/` Parquet + load metadata — *pending: switched target from Kaggle to the official **monthly-archive** endpoint (`download/bangkok_monthly`, date-addressable); needs CT's real name/email to register. This source also owns backfill.*
+- [x] **Daily incremental DAG `traffy_ingest`:** poll the live GeoJSON → bronze. *(Implemented as a "today-so-far" **window snapshot** — `fetch_traffy_until` paginates the newest-first feed back to today 00:00 (Asia/Bangkok), overwrites `dt=today`. The live newest-N feed isn't date-addressable, so the `last_activity`/`logical_date` watermark lives on the monthly-archive source, not here — see CLAUDE.md.)*
+- [x] Idempotency: re-running a date overwrites that partition only — proved (bronze overwrites `dt`; silver dedups across partitions: dt=06-20 + dt=06-21 → 2215 deduped rows)
+- [x] Schedule `@daily`, `catchup=False`. *(Full medallion architecture diagram in the README is a Phase 4 item.)*
 
-**Proof:** `airflow dags trigger` twice → identical partition; bulk-seed tree + a daily incremental partition side by side.
+**Proof:** two runs → identical partition; silver dedups across partitions. *(Side-by-side seed tree pending the seed task.)*
 
 ## Phase 2 — Silver with PySpark (weekend 2)
 
