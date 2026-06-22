@@ -54,30 +54,44 @@
 
 **Proof:** `spark/proof_queries.py` answers both — top districts by flooding backlog (from `fact_district_daily`) and median resolution time by district (from `fact_ticket_lifecycle`). 20 spark tests pass in the `bangkok-spark` container. *(Data window currently short — historical seed not yet loaded.)*
 
-## Phase 4 — GCP wiring + orchestration hardening (weekend 4)
+> **Accelerated track (revised 2026-06-22).** Phases 0–3 done. CT has prior **GCP and Looker Studio** experience (Champ data track), so the IAM/billing variance and the BI-tool learning tax are largely gone — **Databricks/Delta is the only genuinely new piece left.** Remaining work re-sequenced to front-load what makes the project *applyable this week*, then layer the rest while interviewing. Revised estimate: **~18–28 focused hours** (was ~38–59 before accounting for prior experience).
 
-- [ ] Flip `STORAGE_BACKEND=gcs`: bronze/silver → GCS, gold → BigQuery (`bronze_raw` / `silver` / `gold` datasets). Stay in free tier — sandbox limits; no Composer, no persistent Dataproc
-- [ ] Full dependency graph: (seed once) + daily ingest → validate → transform → publish; retries + exponential backoff, task SLAs, on-failure callback
-- [ ] **Freshness SLA:** yesterday's tickets must land + transform by a set hour (e.g. 06:00) — monitored, alerts on breach
-- [ ] Backfill: replay historical days by `logical_date` off the bulk seed — prove with `airflow dags backfill -s <start> -e <end>` (same code path as the daily run)
+## Milestone 0 — Make it applyable (do first, ~1–2h)
+
+- [ ] `git remote add` + push the **public** GitHub repo (makes the resume link live)
+- [ ] Minimal CI (GitHub Actions): `ruff` + non-spark `pytest` + DAG-integrity on push → green badge. (Spark suite stays Docker-only; note that in the README.)
+- [ ] Resume bullets live (Phases 0–3 only — see "earned bullets" below); start applications
+
+**Proof:** public repo link + green CI badge. *This is the gate to start applying — everything below can land afterwards.*
+
+## Phase 4 — GCP wiring + orchestration hardening (FAST — prior GCP experience, ~6–9h)
+
+- [ ] Prereq: **monthly-archive seed** (register name/email; load history) — also unblocks backfill. ~3–5h (counted separately below).
+- [ ] Flip `STORAGE_BACKEND=gcs` via `include/storage.py`: bronze/silver → GCS, gold → BigQuery (`bronze_raw`/`silver`/`gold`). Free tier; no Composer/Dataproc. *(Fast: GCS/BQ setup is familiar — the new work is just the storage-backend impl + the gold→BQ load.)*
+- [ ] Orchestration hardening: retries + exponential backoff, task SLAs, on-failure callback
+- [ ] **Freshness SLA:** yesterday's data lands + transforms by 06:00, alert on breach
+- [ ] Backfill: replay history by `logical_date` off the seed (`airflow dags backfill`)
 - [ ] README: final medallion architecture diagram
 
-**Proof:** backfill run repopulating N days, BigQuery gold tables queryable in console, a freshness-SLA alert firing on a late batch.
+**Proof:** BigQuery gold queryable in console; a backfill repopulating N days; a freshness-SLA alert firing on a late batch.
 
-## Phase 5 — CI polish + Databricks + dashboard (weekend 5)
+## Phase 5 — Databricks + dashboard + case study (~6–9h)
 
-- [ ] CI hardening: ruff + pytest + DAG integrity on PR (already scaffolded — add coverage gate)
-- [ ] Port `silver_traffy.py` to a Databricks Free Edition notebook (Delta); note API differences in `docs/databricks_notes.md` → the CV word "Databricks" is now honest
-- [ ] Looker Studio dashboard on the gold layer: district complaint map, resolution-time trend, backlog by category (also closes the LMWN BI-tool gap)
-- [ ] Rewrite README as a mini case study (problem → design decisions → result), link the dashboard
+- [ ] **Databricks Free Edition: port `silver_traffy.py` to a Delta notebook** — *the one new-learning chunk; keep it TDD-light.* Note API/Delta differences in `docs/databricks_notes.md` → "Databricks" becomes honest.
+- [ ] Looker Studio dashboard on gold (**FAST — prior Looker experience**): district backlog map, resolution-time trend, backlog by category
+- [ ] Rewrite README as a mini case study (problem → design decisions → result), link the dashboard + `LEARNING.md`
 
-**Proof:** public repo + live dashboard link.
+**Proof:** public repo + live dashboard link + the Delta notebook.
 
-## Phase 6 — Showcase integration (evening)
+## Phase 6 — Showcase integration (~2–3h)
 
-- [ ] Page 3 on the case-study webpage (4-block formula; headline = the design insight)
-- [ ] Master CV: add project + the earned bullets (only the ones now true)
-- [ ] Fit Analysis: mark DE tool gaps closed (now incl. incremental/CDC + freshness SLA)
+- [ ] Case-study webpage page (4-block formula; headline = the design insight)
+- [ ] Master CV: add project + the now-true bullets
+- [ ] Fit Analysis: mark DE tool gaps closed (incremental/CDC, freshness SLA, BigQuery, Databricks, Looker)
+
+## Cross-cutting follow-ups
+- [ ] **Bronze empty-partition guard** (skip writing column-less empty partitions) — tracked; ~1h. See `LEARNING.md` §7 bug 4.
+- [ ] Monthly-archive seed (register + load) ~3–5h — prerequisite for Phase 4 backfill.
 
 ## Parked (v2 — deliberately deferred, say so in interviews)
 

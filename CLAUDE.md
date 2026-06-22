@@ -1,6 +1,6 @@
 # CLAUDE.md — Bangkok Location-Intelligence Lakehouse
 
-> Entry point for this repo. The phase-by-phase plan is [`docs/EXECUTION.md`](docs/EXECUTION.md); the bronze→silver promises are [`docs/contracts.md`](docs/contracts.md). This file is the quick orientation + the hard-won facts that aren't obvious from the code.
+> Entry point for this repo. The phase-by-phase plan is [`docs/EXECUTION.md`](docs/EXECUTION.md); the bronze→silver promises are [`docs/contracts.md`](docs/contracts.md); the gold star schema is [`docs/data_model.md`](docs/data_model.md). **For the reasoning/decisions/bug post-mortems (interview prep), see [`LEARNING.md`](LEARNING.md)** (written 2026-06-22). This file is the quick orientation + the hard-won facts that aren't obvious from the code.
 >
 > **This is the live build repo.** The older `C:\Projects\bangkok-location-lakehouse\` folder is the abandoned pre-pivot POI version — ignore it.
 
