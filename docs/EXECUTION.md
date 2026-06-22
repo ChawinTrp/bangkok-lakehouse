@@ -46,13 +46,13 @@
 
 ## Phase 3 — Gold + data model (weekend 3)
 
-- [ ] Dimensions: `dim_district`, `dim_category`, `dim_date`
-- [ ] **`fact_ticket_lifecycle`** — *accumulating snapshot*, grain: **one ticket**; milestone timestamps (reported, in-progress, finished) fill in over the ticket's life; measures: `days_to_resolve`, `is_resolved`, `is_reopened`
-- [ ] **`fact_district_daily`** — *periodic snapshot*, grain: **district × category × day**; measures: opened, closed, backlog, median resolution time. This is the daily-fresh mart powering the dashboard.
-- [ ] Optional differentiator: TOPSIS "service-stress" ranking over districts (backlog + resolution lag + recurring-flooding weight)
-- [ ] `docs/data_model.md` with the schema diagram + grain/SCD decisions (note: lifecycle = accumulating snapshot, district_daily = periodic snapshot)
+- [x] Dimensions: `dim_district`, `dim_category`, `dim_date` (natural keys; dims derived from silver, `dim_date` generated). *(`build_dim_*` in `spark/transforms/gold_traffy.py`.)*
+- [x] **`fact_ticket_lifecycle`** — *accumulating snapshot*, grain: **one ticket**; milestones (reported/in-progress/finished); measures `days_to_resolve`, `is_resolved`, `is_reopened`. `ticket_id` degenerate dim; rebuilt from silver each run (self-healing).
+- [x] **`fact_district_daily`** — *periodic snapshot, **dense***, grain: **district × category × day**; measures opened, closed, **backlog** (semi-additive, cumulative over the dense grid), **median_resolution_time** (non-additive).
+- [ ] Optional differentiator: TOPSIS "service-stress" ranking — *deferred (labelled follow-up); core star comes first.*
+- [x] `docs/data_model.md` — star diagram + grain/key/additivity/SCD decisions + honest limitations.
 
-**Proof:** SQL answering "top 5 districts by unresolved flooding complaints this week" and "median resolution time by district."
+**Proof:** `spark/proof_queries.py` answers both — top districts by flooding backlog (from `fact_district_daily`) and median resolution time by district (from `fact_ticket_lifecycle`). 20 spark tests pass in the `bangkok-spark` container. *(Data window currently short — historical seed not yet loaded.)*
 
 ## Phase 4 — GCP wiring + orchestration hardening (weekend 4)
 

@@ -26,9 +26,10 @@ pytest        # run the unit tests
 ruff check .  # lint
 ```
 
-Status: **Phases 0–2 done** (built from scratch as a learning project).
+Status: **Phases 0–3 done** (built from scratch as a learning project).
 
-- **Phase 0** — scaffolding, CI, Dockerised Airflow ✅
+- **Phase 0** — scaffolding, Dockerised Airflow ✅
 - **Phase 1** — bronze: live Traffy ingestion (today-so-far snapshot, paginated) running in Airflow ✅
 - **Phase 2** — silver: PySpark transform (dedup-latest, timestamp parse, Bangkok bbox, category explode, `state_type_latest` → canonical `status`), a fail-closed quality gate, and the bronze→silver [data contract](docs/contracts.md); wired into the DAG via `DockerOperator` ✅
-- **Phase 3** — gold: star schema (dimensions + accumulating-snapshot & periodic-snapshot facts) ⏭ next
+- **Phase 3** — gold: a Kimball [star schema](docs/data_model.md) — 3 conformed dimensions + `fact_ticket_lifecycle` (accumulating snapshot) + `fact_district_daily` (dense periodic snapshot); proof queries in `spark/proof_queries.py` ✅
+- **Phase 4** — GCP wiring (GCS/BigQuery), freshness SLA, backfill ⏭ next
