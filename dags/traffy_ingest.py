@@ -72,7 +72,22 @@ def traffy_ingest():
         mount_tmp_dir=False,  # required under DooD: don't try to bind a worker tmp dir
     )
 
-    load_bronze() >> silver
+    # Gold runs the same way silver does — a separate bangkok-spark container that
+    # reads silver and builds the star schema (dims + the two snapshot facts).
+    gold = DockerOperator(
+        task_id="gold_transform",
+        image="bangkok-spark",
+        command="python -m spark.transforms.gold_traffy",
+        working_dir="/app",
+        mounts=[Mount(source=HOST_PROJECT_PATH, target="/app", type="bind")],
+        environment={"LAKEHOUSE_ROOT": "data"},
+        docker_url="unix://var/run/docker.sock",
+        network_mode="bridge",
+        auto_remove="success",
+        mount_tmp_dir=False,  # required under DooD: don't try to bind a worker tmp dir
+    )
+
+    load_bronze() >> silver >> gold
 
 
 traffy_ingest()
