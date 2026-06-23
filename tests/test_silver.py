@@ -7,6 +7,7 @@ pyspark = pytest.importorskip("pyspark")
 from pyspark.sql.types import ArrayType, StringType, StructField, StructType  # noqa: E402
 
 from spark.transforms.silver_traffy import (  # noqa: E402
+    build_silver_tickets,
     dedup_latest,
     explode_categories,
     filter_bangkok_bbox,
@@ -91,3 +92,35 @@ def test_explode_categories_one_row_per_pair(spark):
     df = spark.createDataFrame(rows, schema)
     out = sorted((r["ticket_id"], r["category"]) for r in explode_categories(df).collect())
     assert out == [("A", "road"), ("A", "tree"), ("B", "flood")]  # C's empty array -> no rows
+
+
+def test_empty_window_does_not_poison_partitioned_read(spark, tmp_path, monkeypatch):
+    # Regression: an empty-window day used to land a column-less parquet that crashed
+    # Spark's partitioned reader (IndexOutOfBoundsException). With the write-path fix
+    # the empty day produces NO partition, so reading bronze/traffy still succeeds.
+    import include.storage as storage
+    from include.traffy import flatten_traffy
+
+    monkeypatch.setattr(storage, "LAKEHOUSE_ROOT", tmp_path)
+
+    feature = {
+        "geometry": {"type": "Point", "coordinates": [100.5, 13.8]},  # inside Bangkok bbox
+        "properties": {
+            "ticket_id": "A",
+            "last_activity": "2026-06-20 12:00:00",
+            "state_type_latest": "finish",
+        },
+    }
+    storage.write_bronze_parquet(flatten_traffy([feature], "2026-06-20"), "traffy", "2026-06-20")
+    # the empty window: no rows -> no partition lands (the actual fix)
+    empty_out = storage.write_bronze_parquet(
+        flatten_traffy([], "2026-06-22"), "traffy", "2026-06-22"
+    )
+    assert empty_out is None
+
+    # Spark reads the partitioned bronze tree exactly like main() does — must not crash.
+    bronze = spark.read.parquet(str(tmp_path / "bronze" / "traffy"))
+    tickets = build_silver_tickets(bronze).collect()
+
+    assert [r["ticket_id"] for r in tickets] == ["A"]
+    assert tickets[0]["status"] == "resolved"
