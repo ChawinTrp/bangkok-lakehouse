@@ -51,16 +51,17 @@
 - [x] **`fact_district_daily`** — *periodic snapshot, **dense***, grain: **district × category × day**; measures opened, closed, **backlog** (semi-additive, cumulative over the dense grid), **median_resolution_time** (non-additive).
 - [ ] Optional differentiator: TOPSIS "service-stress" ranking — *deferred (labelled follow-up); core star comes first.*
 - [x] `docs/data_model.md` — star diagram + grain/key/additivity/SCD decisions + honest limitations.
+- [x] **Gold wired into the DAG** (2026-06-23): `load_bronze >> silver_transform >> gold_transform` (gold via the same DockerOperator/DooD pattern as silver) — the pipeline is now end-to-end bronze→silver→gold.
 
-**Proof:** `spark/proof_queries.py` answers both — top districts by flooding backlog (from `fact_district_daily`) and median resolution time by district (from `fact_ticket_lifecycle`). 20 spark tests pass in the `bangkok-spark` container. *(Data window currently short — historical seed not yet loaded.)*
+**Proof:** `spark/proof_queries.py` answers both — top districts by flooding backlog (from `fact_district_daily`) and median resolution time by district (from `fact_ticket_lifecycle`). 21 spark tests pass in the `bangkok-spark` container. **Full DAG run verified end-to-end in Airflow (2026-06-23):** all three tasks green on live data → gold rebuilt (`dim_date` 5d, `fact_ticket_lifecycle` 3,618 rows, `fact_district_daily` 9,600 rows). *(Data window still short — historical seed not yet loaded.)*
 
 > **Accelerated track (revised 2026-06-22).** Phases 0–3 done. CT has prior **GCP and Looker Studio** experience (Champ data track), so the IAM/billing variance and the BI-tool learning tax are largely gone — **Databricks/Delta is the only genuinely new piece left.** Remaining work re-sequenced to front-load what makes the project *applyable this week*, then layer the rest while interviewing. Revised estimate: **~18–28 focused hours** (was ~38–59 before accounting for prior experience).
 
 ## Milestone 0 — Make it applyable (do first, ~1–2h)
 
-- [ ] `git remote add` + push the **public** GitHub repo (makes the resume link live)
-- [ ] Minimal CI (GitHub Actions): `ruff` + non-spark `pytest` + DAG-integrity on push → green badge. (Spark suite stays Docker-only; note that in the README.)
-- [ ] Resume bullets live (Phases 0–3 only — see "earned bullets" below); start applications
+- [x] `git remote add` + push the **public** GitHub repo — live at [github.com/ChawinTrp/bangkok-lakehouse](https://github.com/ChawinTrp/bangkok-lakehouse)
+- [ ] Minimal CI (GitHub Actions): `ruff` + non-spark `pytest` + DAG-integrity on push → green badge. (Spark suite stays Docker-only; note that in the README.) ← **next increment**
+- [ ] Resume bullets live (Phases 0–3 only — bullets drafted in LEARNING.md/summary); start applications
 
 **Proof:** public repo link + green CI badge. *This is the gate to start applying — everything below can land afterwards.*
 
@@ -90,7 +91,7 @@
 - [ ] Fit Analysis: mark DE tool gaps closed (incremental/CDC, freshness SLA, BigQuery, Databricks, Looker)
 
 ## Cross-cutting follow-ups
-- [ ] **Bronze empty-partition guard** (skip writing column-less empty partitions) — tracked; ~1h. See `LEARNING.md` §7 bug 4.
+- [x] **Bronze empty-partition guard** (2026-06-23, commit `c0475dd`) — `write_bronze_parquet` skips empty windows (returns `None`); unit + spark-regression tests. See `LEARNING.md` §7 bug 4.
 - [ ] Monthly-archive seed (register + load) ~3–5h — prerequisite for Phase 4 backfill.
 
 ## Parked (v2 — deliberately deferred, say so in interviews)
