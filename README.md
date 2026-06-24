@@ -1,5 +1,7 @@
 # Bangkok Location-Intelligence Lakehouse
 
+[![CI](https://github.com/ChawinTrp/bangkok-lakehouse/actions/workflows/ci.yml/badge.svg)](https://github.com/ChawinTrp/bangkok-lakehouse/actions/workflows/ci.yml)
+
 An **incremental medallion lakehouse** over [Traffy Fondue](https://www.traffy.in.th/) — Bangkok's live citizen-complaint platform (~1.3M geolocated tickets, thousands/day, with a real status lifecycle).
 
 **Question it answers:** *which districts are underserved by city services, and how does that overlay site quality?*

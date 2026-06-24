@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint-and-test:
+    name: Lint + non-Spark tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Ruff (lint)
+        run: ruff check .
+
+      # pyproject addopts already excludes the Spark suite (-m 'not spark');
+      # Spark tests run in the bangkok-spark Docker image, not in CI.
+      - name: Pytest (non-Spark)
+        run: pytest

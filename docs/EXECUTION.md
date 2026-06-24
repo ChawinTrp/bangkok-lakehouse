@@ -60,7 +60,7 @@
 ## Milestone 0 — Make it applyable (do first, ~1–2h)
 
 - [x] `git remote add` + push the **public** GitHub repo — live at [github.com/ChawinTrp/bangkok-lakehouse](https://github.com/ChawinTrp/bangkok-lakehouse)
-- [ ] Minimal CI (GitHub Actions): `ruff` + non-spark `pytest` + DAG-integrity on push → green badge. (Spark suite stays Docker-only; note that in the README.) ← **next increment**
+- [x] Minimal CI (GitHub Actions, 2026-06-24): `ruff` + non-spark `pytest` on push/PR → badge in README. (Spark suite stays Docker-only; **DAG-integrity deferred** — it needs Airflow installed in CI, heavier than this lean pass; the DAG is parse-verified in the `bangkok-spark`/airflow container instead.)
 - [ ] Resume bullets live (Phases 0–3 only — bullets drafted in LEARNING.md/summary); start applications
 
 **Proof:** public repo link + green CI badge. *This is the gate to start applying — everything below can land afterwards.*
